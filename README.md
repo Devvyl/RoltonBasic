@@ -1,4 +1,4 @@
-# RoltonBasic
+# RoltonDevvyl
 <br>
 <a href="https://github.com/KirillMos2/RoltonBasic/blob/main/README.md#English">ENG version</a>
 
@@ -7,7 +7,7 @@
 <br>
 ## English
 
-*RoltonBasic* - functionaly-based programming language on C++. 
+*RoltonDevvyl* - functionaly-based programming language on C++.
 
 It supporting:
 - 2 types
@@ -16,7 +16,7 @@ It supporting:
 
 Example of code:
 
-```RoltonBasic
+```RoltonDevvyl
 VARINT a 5
 VARSTR b "Nagaev"
 PRINT "My num is "
@@ -29,7 +29,8 @@ TYPE b
 
 ## Русский
 
-*RoltonBasic* - функционально-ориентированный язык программирования на C++
+*RoltonDevvyl* - функционально-ориентированный язык программирования на C++.
+Является форком проекта RoltonBasic, этот форк нацелен на совместимость с оригиналом, но с более менее адекватными реализациями.
 
 Он поддерживает:
 - 2 типа
@@ -38,7 +39,7 @@ TYPE b
 
 Пример кода:
 
-```RoltonBasic
+```RoltonDevvyl
 VARINT a 5
 VARSTR b "Nagaev"
 PRINT "My num is "

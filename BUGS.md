@@ -1,16 +1,16 @@
-# Баги RoltonBasic
+# Баги RoltonDevvyl
 
 ## Система присвоения кодов багам
 
 Форма выглядит как `0xABBBBBBB`, где A - место ошибки:
-- `a` - лексер 
+- `a` - лексер
 - `b` - парсер
 - `c` - транслятор
 - `d` - входная точка
 
 , BBBBBBB - UEI (Unical Error Indeficator)
 
-## Баги в RoltonBasic
+## Баги в RoltonDevvyl
 
 ### Лексер
 
