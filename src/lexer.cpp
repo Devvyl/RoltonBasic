@@ -24,55 +24,72 @@ namespace lexer {
         std::string buf = "";
         int mod = 0;
         token newtoken;
+        bool in_string = false;
+        char string_quote = '\0';
+        bool escape_next = false;
 
         for (int i = 0; i < code.size(); i++) {
             char symb = code[i];
 
-            if (!std::isalpha(symb) && mod == 1) {
-                if (buf == "PRINT" || buf == "VARINT" || buf == "VARSTR" ||
-                    buf == "TYPE" || buf == "INPUT" || buf == "SUM" || buf == "SUB") {
-                    newtoken = {"KWORD", buf};
+
+            if (in_string) {
+                if (escape_next) {
+                    switch (symb) {
+                        case 'n': buf += '\n'; break;
+                        case 't': buf += '\t'; break;
+                        case 'v': buf += '\v'; break;
+                        case '\'': buf += '\''; break;
+                        case '\"': buf += '\"'; break;
+                        case '\\': buf += '\\'; break;
+                        default:
+                            std::cout << "\nLEXERFAIL: Unknown escape sequence \\" << symb;
+                            exit(10);
+                    }
+                    escape_next = false;
+                } else if (symb == '\\') {
+                    escape_next = true;
+                } else if (symb == string_quote) {
+                    tokens.push_back({"STRING", buf});
+                    buf = "";
+                    in_string = false;
+                    string_quote = '\0';
                 } else {
-                    newtoken = {"WORD", buf};
+                    buf += symb;
                 }
-                tokens.push_back(newtoken);
-                buf = "";
-                mod = 0;
+                continue;
+            }
+
+            if (!std::isalpha(symb) && mod == 1) {
+                flush_buffer(buf, mod, tokens);
             }
             else if (!std::isdigit(symb) && mod == 2) {
-                newtoken = {"DIGIT", buf};
-                tokens.push_back(newtoken);
-                buf = "";
-                mod = 0;
+                flush_buffer(buf, mod, tokens);
             }
 
             switch (symb) {
                 case '=':
                     if (i + 1 < code.size() && code[i+1] == '=') {
                         i++;
-                        tokens.push_back({"EQUALS", "NONE"});
+                        tokens.push_back({"EQUALS", "=="});
                     } else {
-                        tokens.push_back({"EQUAL", "NONE"});
+                        tokens.push_back({"EQUAL", "="});
                     }
                     break;
-                case ' ': tokens.push_back({"SPACE", "NONE"}); break;
-                case '+': tokens.push_back({"PLUS", "NONE"}); break;
-                case '-': tokens.push_back({"MINUS", "NONE"}); break;
-                case '*': tokens.push_back({"STAR", "NONE"}); break;
-                case '%': tokens.push_back({"MOD", "NONE"}); break;
-                case '/': tokens.push_back({"SLASH", "NONE"}); break;
-                case '(': tokens.push_back({"L_PAREN", "NONE"}); break;
-                case ')': tokens.push_back({"R_PAREN", "NONE"}); break;
+                case ' ':
+                    tokens.push_back({"SPACE", " "});
+                    break;
+                case '+': tokens.push_back({"PLUS", "+"}); break;
+                case '-': tokens.push_back({"MINUS", "-"}); break;
+                case '*': tokens.push_back({"STAR", "*"}); break;
+                case '%': tokens.push_back({"MOD", "%"}); break;
+                case '/': tokens.push_back({"SLASH", "/"}); break;
+                case '(': tokens.push_back({"L_PAREN", "("}); break;
+                case ')': tokens.push_back({"R_PAREN", ")"}); break;
                 case '\'':
-                case '\"': tokens.push_back({"QUOTE", "NONE"}); break;
-                case '\\':
-                    if (i + 1 < code.size()) {
-                        if (code[i+1] == 'n') { tokens.push_back({"SPECSYMBOL", "\n"}); }
-                        else if (code[i+1] == 't') { tokens.push_back({"SPECSYMBOL", "\t"}); }
-                        else if (code[i+1] == 'v') { tokens.push_back({"SPECSYMBOL", "\v"}); }
-                        else { std::cout << "\nLEXERFAIL: Unknown symbol"; exit(10); }
-                        i++;
-                    }
+                case '\"':
+                    in_string = true;
+                    string_quote = symb;
+                    buf = "";
                     break;
                 case '.':
                 case ',':
@@ -90,37 +107,25 @@ namespace lexer {
                     break;
                 case '\xD0':
                     if (i + 1 < code.size() && code[i+1] == '\x9E') {
-                        buf += "№";
-                        tokens.push_back({"SYMBOL", buf});
-                        buf = "";
+                        tokens.push_back({"SYMBOL", "№"});
                         i++;
                         break;
                     }
                     [[fallthrough]];
                 default:
                     if (std::isalpha(symb)) {
-                        if (buf.empty()) {
-                            buf += symb;
-                            mod = 1;
-                        } else {
-                            if (mod == 1) {
-                                buf += symb;
-                            } else {
-                                flush_buffer(buf, mod, tokens);
-                            }
+                        if (mod != 1) {
+                            flush_buffer(buf, mod, tokens);
                         }
+                        buf += symb;
+                        mod = 1;
                     }
                     else if (std::isdigit(symb)) {
-                        if (buf.empty()) {
-                            buf += symb;
-                            mod = 2;
-                        } else {
-                            if (mod == 2) {
-                                buf += symb;
-                            } else {
-                                flush_buffer(buf, mod, tokens);
-                            }
+                        if (mod != 2) {
+                            flush_buffer(buf, mod, tokens);
                         }
+                        buf += symb;
+                        mod = 2;
                     }
                     else {
                         tokens.push_back({"SYMBOL", std::string(1, symb)});
@@ -129,12 +134,13 @@ namespace lexer {
             }
         }
 
+        if (in_string) {
+            std::cout << "\nLEXERFAIL: Unclosed string literal";
+            exit(11);
+        }
+
         if (!buf.empty()) {
-            if (mod == 1) {
-                tokens.push_back({"WORD", buf});
-            } else if (mod == 2) {
-                tokens.push_back({"DIGIT", buf});
-            }
+            flush_buffer(buf, mod, tokens);
         }
 
         return tokens;
