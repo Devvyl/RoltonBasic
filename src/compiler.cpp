@@ -1,6 +1,7 @@
 #include "compiler.hpp"
 #include <iostream>
 #include <vector>
+#include <sstream>
 
 namespace compiler {
     bool in_vector(std::vector<std::string> vct, std::string find) {
@@ -10,84 +11,183 @@ namespace compiler {
         return false;
     }
 
+    rbl_types::var* find_var(std::vector<rbl_types::var>& vars, const std::string& name) {
+        for (int i = 0; i < vars.size(); i++) {
+            if (vars[i].name == name) {
+                return &vars[i];
+            }
+        }
+        return nullptr;
+    }
+
+    std::string escape_string(const std::string& str) {
+        std::string result;
+        for (char c : str) {
+            switch (c) {
+                case '\n': result += "\\n"; break;
+                case '\t': result += "\\t"; break;
+                case '\v': result += "\\v"; break;
+                case '\"': result += "\\\""; break;
+                case '\\': result += "\\\\"; break;
+                default: result += c; break;
+            }
+        }
+        return result;
+    }
+
     std::string translating(std::vector<rbl_types::ast_type> ast, std::vector<rbl_types::var> vars) {
         std::vector<std::string> includes;
         std::string out = "int main() {\n";
         std::string ret = "";
+
         for (int i = 0; i != ast.size(); i++) {
             auto astt = ast[i];
+            std::cout << "[COMPILER LOG] Processing command: " << astt.command << "\n";
+
             if (astt.command == "PRINT") {
                 if (!in_vector(includes, "<stdio.h>")) {
                     includes.push_back("<stdio.h>");
                 }
-                if (!in_vector(includes, "<stdlib.h>")) {
-                    includes.push_back("<stdlib.h>");
-                }
+
                 out += "    printf(\"";
-                if (astt.args[0] == "\"\"" && astt.args[(astt.args).size()-1] == "\"\"") {
-                    for (int i = 1; i != (astt.args).size()-1; i++) {
-                        out += astt.args[i];
-                    }
-                    out += "\"";
+
+                if (astt.args.empty()) {
+                    std::cerr << "COMPILER ERROR: PRINT command requires arguments\n";
+                    exit(24);
                 }
-                else {
-                    if ((astt.args).size() == 1) {
-                        int st = 0;
-                        for (int i = 0; i != vars.size(); i++) {
-                            if (vars[i].name == astt.args[0]) {
-                                st = 1;
-                                if (vars[i].type == "integer") {
-                                    out += "%d\", " + astt.args[0];
-                                }
-                                else if (vars[i].type == "string") {
-                                    out += "%s\", " + astt.args[0];
-                                }
-                            }
+
+                std::string format_str;
+                std::string args_str;
+                bool first_arg = true;
+
+                for (int j = 0; j < astt.args.size(); j++) {
+                    const std::string& arg = astt.args[j];
+
+                    rbl_types::var* var_ptr = find_var(vars, arg);
+
+                    if (var_ptr != nullptr) {
+                        if (var_ptr->type == "integer") {
+                            format_str += "%d";
+                            if (!first_arg) args_str += ", ";
+                            args_str += var_ptr->name;
                         }
-                        if (st == 0) {
-                            std::cerr<<"You want "<<astt.args[0]<<" but it not created. List of vars:\n\n";
-                            for (int h = 0; h != vars.size(); h++) {
-                                std::cerr<<"Name: "<<vars[h].name<<"\nType: "<<vars[h].type<<"\nValue: "<<vars[h].value<<"\n\n";
-                            }
-                            exit(23);
+                        else if (var_ptr->type == "string") {
+                            format_str += "%s";
+                            if (!first_arg) args_str += ", ";
+                            args_str += var_ptr->name;
                         }
                     }
+                    else {
+                        if (!arg.empty() && arg.front() != '"' && std::isdigit(arg[0])) {
+                            format_str += "%d";
+                            if (!first_arg) args_str += ", ";
+                            args_str += arg;
+                        }
+                        else {
+                            std::string clean_arg = arg;
+                            format_str += "%s";
+                            if (!first_arg) args_str += ", ";
+                            args_str += "\"" + escape_string(clean_arg) + "\"";
+                        }
+                    }
+                    first_arg = false;
+                }
+
+                out += format_str + "\\n\"";
+                if (!args_str.empty()) {
+                    out += ", " + args_str;
                 }
                 out += ");\n";
             }
             else if (astt.command == "VARINT") {
-                out += "    int ";
-                out += astt.args[0];
-                out += " = ";
-                out += astt.args[1];
-                out += ";\n";
+                if (astt.args.size() < 2) {
+                    std::cerr << "COMPILER ERROR: VARINT requires 2 arguments (name, value)\n";
+                    exit(25);
+                }
+
+                out += "    int " + astt.args[0] + " = " + astt.args[1] + ";\n";
                 vars.push_back({astt.args[0], "integer", astt.args[1]});
             }
             else if (astt.command == "VARSTR") {
-                if (astt.args[1] == "\"\"" && astt.args[3] == "\"\"") {
-                    out += "    char ";
-                    out += astt.args[0];
-                    out += "[] = \"";
-                    out += astt.args[2];
-                    out += "\";\n";
-                    vars.push_back({astt.args[0], "string", astt.args[1]});
+                if (astt.args.size() < 2) {
+                    std::cerr << "COMPILER ERROR: VARSTR requires 2 arguments (name, value)\n";
+                    exit(26);
                 }
-                else {
-                    std::cerr<<"SYNTAX ERROR: not found quotes\n";
-                    exit(22);
-                }
+
+                std::string value = astt.args[1];
+
+                std::string escaped_value = escape_string(value);
+
+                out += "    char " + astt.args[0] + "[] = \"" + escaped_value + "\";\n";
+                vars.push_back({astt.args[0], "string", value});
             }
             else if (astt.command == "TYPE") {
-                out += "    // this function unsupported on C";
+                out += "    // TYPE function - type checking at runtime\n";
+                if (astt.args.size() > 0) {
+                    rbl_types::var* var_ptr = find_var(vars, astt.args[0]);
+                    if (var_ptr != nullptr) {
+                        out += "    printf(\"Variable " + astt.args[0] + " type: ";
+                        if (var_ptr->type == "integer") {
+                            out += "integer\\n\");\n";
+                        } else if (var_ptr->type == "string") {
+                            out += "string\\n\");\n";
+                        }
+                    } else {
+                        out += "    printf(\"Variable " + astt.args[0] + " not found\\n\");\n";
+                    }
+                }
+                if (!in_vector(includes, "<stdio.h>")) {
+                    includes.push_back("<stdio.h>");
+                }
+            }
+            else if (astt.command == "INPUT") {
+                if (!in_vector(includes, "<stdio.h>")) {
+                    includes.push_back("<stdio.h>");
+                }
+
+                if (astt.args.size() > 0) {
+                    out += "    scanf(\"";
+                    rbl_types::var* var_ptr = find_var(vars, astt.args[0]);
+                    if (var_ptr != nullptr) {
+                        if (var_ptr->type == "integer") {
+                            out += "%d\", &" + astt.args[0] + ");\n";
+                        } else if (var_ptr->type == "string") {
+                            out += "%s\", " + astt.args[0] + ");\n";
+                        }
+                    } else {
+                        std::cerr << "COMPILER ERROR: Variable " << astt.args[0] << " not found for INPUT\n";
+                        exit(27);
+                    }
+                }
+            }
+            else if (astt.command == "SUM" || astt.command == "SUB") {
+                out += "    // " + astt.command + " operation - basic implementation\n";
+                if (astt.args.size() >= 3) {
+                    std::string op = (astt.command == "SUM") ? "+" : "-";
+                    out += "    " + astt.args[0] + " = " + astt.args[1] + " " + op + " " + astt.args[2] + ";\n";
+
+                    for (int j = 0; j < vars.size(); j++) {
+                        if (vars[j].name == astt.args[0]) {
+                            vars[j].value = "computed";
+                            break;
+                        }
+                    }
+                }
+            }
+            else {
+                out += "    // Unknown command: " + astt.command + "\n";
             }
         }
-        out += "}";
+
+        out += "    return 0;\n";
+        out += "}\n";
+
         for (int i = 0; i != includes.size(); i++) {
-            ret += "#include ";
-            ret += includes[i];
-            ret += "\n";
+            ret += "#include " + includes[i] + "\n";
         }
-        ret += out;
+        ret += "\n" + out;
+
+        std::cout << "[COMPILER LOG] Generated C code:\n" << ret << "\n";
         return ret;
     }
 }
